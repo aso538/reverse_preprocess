@@ -116,10 +116,11 @@ def build_data_preprocess():
     return pipeline
 
 
-def get_labels(img_path=r'E:\Code Camp 2\data\balloon\train\154446334_5d41cd1375_b.jpg'):
+def get_labels(img_path=None):
     with open(r'../data/balloon_dataset/annotations/trainval.json', "r", encoding="utf-8") as f:
         labels = json.load(f)
-    # print('a')
+    if not img_path:
+        img_path = r'E:\Code Camp 2\data\balloon\train\154446334_5d41cd1375_b.jpg'
     all_label = {}
     for i in labels['annotations']:
         img_id = i['image_id']
@@ -152,13 +153,15 @@ def get_labels(img_path=r'E:\Code Camp 2\data\balloon\train\154446334_5d41cd1375
 
 
 def main():
-    data_infos = get_labels()
+    save_path = './out'
+    img_paths = [r'E:\Code Camp 2\data\balloon\train\154446334_5d41cd1375_b.jpg',
+                 r'E:\Code Camp 2\data\balloon\train\7488015492_0583857ca0_k.jpg']
+    data_infos = get_labels(img_paths)
     vis = DetLocalVisualizer()
     pipeline = build_data_preprocess()
     print(pipeline)
 
     for data_info in data_infos:
-
         pre_result = pipeline(data_info)
         data_samples = pre_result['data_samples']
         reverse = Reverse(data_samples)
@@ -168,6 +171,7 @@ def main():
         data_samples.gt_instances.bboxes = bboxes
         segs = data_samples.gt_instances.masks.masks
         img_path = data_info['img_path']
+        img_name = img_path.split('/')[-1]
         # 683,1024-> 548 824 -> 548 640 -> 640 640
         # ori_size-> resize -> crop => pad
 
@@ -175,10 +179,10 @@ def main():
         img = tensor2numpy(img)
         img = mmcv.rgb2bgr(img)
         vis.add_datasample(name='', image=img, data_sample=data_samples, draw_pred=False, show=False,
-                           out_file='数据增强.jpg')
+                           out_file='./{}/{}_数据增强.jpg'.format(save_path,img_name.split('.')[0]))
 
         bboxes, segs = reverse.reverse_preprocess(bboxes, segs)
-        print(bboxes)
+        # print(bboxes)
         data_samples.gt_instances.bboxes = bboxes
         data_samples.gt_instances.masks.masks = segs
         # print(segs.shape)
@@ -186,10 +190,10 @@ def main():
         img = reverse.reverse_img(img)
 
         vis.add_datasample(name='', image=img, data_sample=data_samples, draw_pred=False, show=False,
-                           out_file='还原.jpg')
+                           out_file='./{}/{}_还原.jpg'.format(save_path,img_name.split('.')[0]))
         vis.add_datasample(name='', image=mmcv.rgb2bgr(mmcv.imread(img_path)), data_sample=data_samples,
                            draw_pred=False, show=False,
-                           out_file='还原_原图.jpg')
+                           out_file='./{}/{}_还原_原图.jpg'.format(save_path,img_name.split('.')[0]))
 
 
 if __name__ == '__main__':
