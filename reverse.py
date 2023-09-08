@@ -1,4 +1,4 @@
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Union
 
 import mmcv
 import numpy as np
@@ -15,7 +15,8 @@ class Reverse(object):
     def __init__(self, data_samples: Optional['DetDataSample']):
         self.data_samples = data_samples
 
-    def reverse_preprocess(self, bboxes: np.ndarray, segs: np.ndarray = None) -> Tuple[np.ndarray, np.ndarray]:
+    def reverse_preprocess(self, bboxes: np.ndarray, segs: np.ndarray = None) -> Union[
+        Tuple[np.ndarray, np.ndarray], np.ndarray]:
 
         """反向预处理边界框和分割图像，返回反向处理后的边界框和分割图像
         Args:
@@ -23,17 +24,17 @@ class Reverse(object):
             segs (np.ndarray): 预测分割图 (n,h,w) n为目标数量
 
         Returns:
-            Tuple[np.ndarray]: 逆向预处理后的bboxes和segs
+            Union[Tuple[ndarray, ndarray], ndarray]: 逆向预处理后的bboxes和segs
 
         """
         assert bboxes.shape[1] == 4
         bboxes = self._reverse_bbox(bboxes)
-        self.data_samples.gt_instances.bboxes = bboxes
+        # self.data_samples.gt_instances.bboxes = bboxes
         if isinstance(segs, np.ndarray):
             segs = self._reverse_seg(segs)
-            self.data_samples.gt_instances.masks = segs
-
-        return bboxes, segs
+            # self.data_samples.gt_instances.masks = segs
+            return bboxes, segs
+        return bboxes
 
     def _reverse_bbox(self, bboxes: np.ndarray):
 
@@ -62,6 +63,13 @@ class Reverse(object):
             results.append(img)
 
         return np.array(results)
+
+    def reverse_img(self, img):
+        img = self._reverse_pad_img(img)
+        img = self._reverse_flip_img(img)
+        img = self._reverse_crop_img(img)
+        img = self._reverse_resize_img(img)
+        return img
 
     def _reverse_flip_img(self, img):
 
