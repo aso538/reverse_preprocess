@@ -1,4 +1,4 @@
-from typing import Tuple, Optional, Union
+from typing import Tuple, Optional, Union, List
 
 import mmcv
 import numpy as np
@@ -12,11 +12,12 @@ class Reverse(object):
                     instance-level annotations or predictions.
     """
 
-    def __init__(self, data_samples: Optional['DetDataSample']):
+    def __init__(self, data_samples: Optional['DetDataSample'], transform_config: List):
         self.data_samples = data_samples
+        self.transform_config = transform_config[2:-1]
+        self.transform_config.reverse()
 
-    def reverse_preprocess(self, bboxes: np.ndarray, segs: np.ndarray = None) -> Union[
-        Tuple[np.ndarray, np.ndarray], np.ndarray]:
+    def reverse_preprocess(self, bboxes: np.ndarray, segs: np.ndarray = None) -> Union[Tuple[np.ndarray, np.ndarray], np.ndarray]:
 
         """反向预处理边界框和分割图像，返回反向处理后的边界框和分割图像
         Args:
@@ -42,10 +43,15 @@ class Reverse(object):
         """
         results = []
         for bbox in bboxes:
-            bbox = self._reverse_pad(bbox)
-            bbox = self._reverse_flip(bbox)
-            bbox = self._reverse_crop(bbox)
-            bbox = self._reverse_resize(bbox)
+            for transform in self.transform_config:
+                if 'Pad' in transform['type']:
+                    bbox = self._reverse_pad(bbox)
+                if 'Flip' in transform['type']:
+                    bbox = self._reverse_flip(bbox)
+                if 'Crop' in transform['type']:
+                    bbox = self._reverse_crop(bbox)
+                if 'Resize' in transform['type']:
+                    bbox = self._reverse_resize(bbox)
             results.append(bbox)
 
         return np.array(results)
@@ -56,19 +62,29 @@ class Reverse(object):
         """
         results = []
         for img in seg_imgs:
-            img = self._reverse_pad_img(img)
-            img = self._reverse_flip_img(img)
-            img = self._reverse_crop_img(img)
-            img = self._reverse_resize_img(img)
+            for transform in self.transform_config:
+                if 'Pad' in transform['type']:
+                    img = self._reverse_pad_img(img)
+                if 'Flip' in transform['type']:
+                    img = self._reverse_flip_img(img)
+                if 'Crop' in transform['type']:
+                    img = self._reverse_crop_img(img)
+                if 'Resize' in transform['type']:
+                    img = self._reverse_resize_img(img)
             results.append(img)
 
         return np.array(results)
 
     def reverse_img(self, img):
-        img = self._reverse_pad_img(img)
-        img = self._reverse_flip_img(img)
-        img = self._reverse_crop_img(img)
-        img = self._reverse_resize_img(img)
+        for transform in self.transform_config:
+            if 'Pad' in transform['type']:
+                img = self._reverse_pad_img(img)
+            if 'Flip' in transform['type']:
+                img = self._reverse_flip_img(img)
+            if 'Crop' in transform['type']:
+                img = self._reverse_crop_img(img)
+            if 'Resize' in transform['type']:
+                img = self._reverse_resize_img(img)
         return img
 
     def _reverse_flip_img(self, img):
@@ -96,7 +112,7 @@ class Reverse(object):
 
         """如果数据样本有裁剪属性，则对图像进行反向裁剪，返回裁剪后的图像
         """
-        crop = self.data_samples.crop  # x1 x2 y1 y2
+        crop = self.data_samples.crop_index  # x1 x2 y1 y2
         pre_crop_shape = (int(self.data_samples.ori_shape[0] * self.data_samples.scale_factor[0]),
                           int(self.data_samples.ori_shape[1] * self.data_samples.scale_factor[1]))
         if crop:
@@ -135,7 +151,7 @@ class Reverse(object):
         """如果数据样本有裁剪属性，则对边界框进行反向裁剪，返回裁剪后的边界框
         """
         # img_shape hwc
-        crop = self.data_samples.crop  # x1 x2 y1 y2
+        crop = self.data_samples.crop_index  # x1 x2 y1 y2
         if crop:
             bbox[0] = bbox[0] + crop[0]
             bbox[1] = bbox[1] + crop[2]

@@ -1,27 +1,25 @@
-import cv2
 import mmcv
+import json
+
+from mmcv import Compose
 
 from mmdet.registry import TRANSFORMS
-from mmengine.dataset import Compose
 from mmdet.utils import register_all_modules
-import mmcv.visualization as visualization
-from mmdet.apis.inference import init_detector, inference_detector
-import json
-import numpy as np
 from mmdet.visualization.local_visualizer import DetLocalVisualizer
-from reverse_preprocess.reverse import Reverse
+
+from reverse import Reverse
 
 register_all_modules()
 
 trm_det_train_pipeline = [
     dict(backend_args=None, type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True, with_mask=True),
-    dict(
-        type='CachedMosaic',
-        img_scale=(640, 640),
-        pad_val=114.0,
-        max_cached_images=20,
-        random_pop=False),
+    # dict(
+    #     type='CachedMosaic',
+    #     img_scale=(640, 640),
+    #     pad_val=114.0,
+    #     max_cached_images=20,
+    #     random_pop=False),
     dict(
         type='RandomResize',
         scale=(1280, 1280),
@@ -32,9 +30,10 @@ trm_det_train_pipeline = [
     dict(type='RandomFlip', prob=1.0),
     dict(type='Pad', size=(640, 640), pad_val=dict(img=(114, 114, 114))),
     dict(type='PackDetInputs',
-         meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
-                    'scale_factor', 'flip', 'flip_direction', 'crop', 'scale_factor_list'
-                    )
+         meta_keys=(
+             'img_id', 'img_path', 'ori_shape', 'img_shape',
+             'scale_factor', 'flip', 'flip_direction', 'crop_index', 'scale_factor_list'
+         )
          )
 ]
 
@@ -51,7 +50,6 @@ dino_train_pipeline = [
                     scales=[(480, 1333), (512, 1333), (544, 1333), (576, 1333),
                             (608, 1333), (640, 1333), (672, 1333), (704, 1333),
                             (736, 1333), (768, 1333), (800, 1333)],
-                    # scales=(800, 1333),
                     keep_ratio=True)
             ],
             [
@@ -76,7 +74,7 @@ dino_train_pipeline = [
         ]),
     dict(type='PackDetInputs',
          meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
-                    'scale_factor', 'flip', 'flip_direction', 'crop', 'scale_factor_list'
+                    'scale_factor', 'flip', 'flip_direction', 'crop_index', 'scale_factor_list', 'random_choice_idx'
                     )
          )
 ]
@@ -88,7 +86,7 @@ mask_rcnn_train_pipeline = [
     dict(type='RandomFlip', prob=1.0),
     dict(type='PackDetInputs',
          meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
-                    'scale_factor', 'flip', 'flip_direction', 'crop', 'scale_factor_list'
+                    'scale_factor', 'flip', 'flip_direction', 'crop_index', 'scale_factor_list'
                     )
          )
 ]
@@ -104,9 +102,9 @@ def tensor2numpy(tensor):
     return tensor.cpu().detach().numpy().transpose(1, 2, 0)
 
 
-def build_data_preprocess():
+def build_data_preprocess(transform_config):
     transforms = []
-    for transform in trm_det_train_pipeline:
+    for transform in transform_config:
         if isinstance(transform, dict):
             transforms.append(TRANSFORMS.build(transform))
         else:
@@ -117,10 +115,10 @@ def build_data_preprocess():
 
 
 def get_labels(img_path=None):
-    with open(r'../data/balloon_dataset/annotations/trainval.json', "r", encoding="utf-8") as f:
+    with open(r'data/balloon_dataset/annotations/trainval.json', "r", encoding="utf-8") as f:
         labels = json.load(f)
     if not img_path:
-        img_path = r'E:\Code Camp 2\data\balloon\train\154446334_5d41cd1375_b.jpg'
+        img_path = r'data\balloon\train\154446334_5d41cd1375_b.jpg'
     all_label = {}
     for i in labels['annotations']:
         img_id = i['image_id']
@@ -138,33 +136,44 @@ def get_labels(img_path=None):
         img_label = []
         for label in data['labels']:
             img_label.append({
-                'ignore_flag': 0, 'bbox': [label['bbox'][0], label['bbox'][1], label['bbox'][0] + label['bbox'][2],
-                                           label['bbox'][1] + label['bbox'][3]], 'bbox_label': label['category_id'] - 1,
-                'mask': label['segmentation']
+                'ignore_flag': 0,
+                'bbox': [
+                    label['bbox'][0],
+                    label['bbox'][1],
+                    label['bbox'][0] + label['bbox'][2],
+                    label['bbox'][1] + label['bbox'][3]
+                ],
+                'bbox_label': label['category_id'] - 1,
+                'mask': [label['segmentation']]
             })
-        data_infos.append({'img_path': i,
-                           'img_id': data['image']['id'],
-                           'seg_map_path': None,
-                           'height': data['image']['height'],
-                           'width': data['image']['width'],
-                           'instances': img_label,
-                           'sample_idx': data['image']['id']})
+        data_infos.append({
+            'img_path': i,
+            'img_id': data['image']['id'],
+            'seg_map_path': None,
+            'height': data['image']['height'],
+            'width': data['image']['width'],
+            'instances': img_label,
+            'sample_idx': data['image']['id']
+        })
     return data_infos
 
 
 def main():
     save_path = './out'
-    img_paths = [r'E:\Code Camp 2\data\balloon\train\154446334_5d41cd1375_b.jpg',
-                 r'E:\Code Camp 2\data\balloon\train\7488015492_0583857ca0_k.jpg']
+    img_paths = [
+        r'data\balloon\train\154446334_5d41cd1375_b.jpg',
+        r'data\balloon\train\7488015492_0583857ca0_k.jpg',
+    ]
+    transform_config = trm_det_train_pipeline
     data_infos = get_labels(img_paths)
     vis = DetLocalVisualizer()
-    pipeline = build_data_preprocess()
+    pipeline = build_data_preprocess(transform_config=transform_config)
     print(pipeline)
 
     for data_info in data_infos:
         pre_result = pipeline(data_info)
         data_samples = pre_result['data_samples']
-        reverse = Reverse(data_samples)
+        reverse = Reverse(data_samples, transform_config)
         print(data_samples)
 
         bboxes = data_samples.gt_instances.bboxes.tensor.numpy()
@@ -173,27 +182,25 @@ def main():
         img_path = data_info['img_path']
         img_name = img_path.split('/')[-1]
         # 683,1024-> 548 824 -> 548 640 -> 640 640
-        # ori_size-> resize -> crop => pad
+        # ori_size-> resize -> crop -> pad
 
         img = pre_result['inputs']
         img = tensor2numpy(img)
         img = mmcv.rgb2bgr(img)
         vis.add_datasample(name='', image=img, data_sample=data_samples, draw_pred=False, show=False,
-                           out_file='./{}/{}_数据增强.jpg'.format(save_path,img_name.split('.')[0]))
+                           out_file='./{}/{}_数据增强.jpg'.format(save_path, img_name.split('.')[0]))
 
         bboxes, segs = reverse.reverse_preprocess(bboxes, segs)
-        # print(bboxes)
         data_samples.gt_instances.bboxes = bboxes
         data_samples.gt_instances.masks.masks = segs
-        # print(segs.shape)
 
         img = reverse.reverse_img(img)
 
         vis.add_datasample(name='', image=img, data_sample=data_samples, draw_pred=False, show=False,
-                           out_file='./{}/{}_还原.jpg'.format(save_path,img_name.split('.')[0]))
+                           out_file='./{}/{}_还原.jpg'.format(save_path, img_name.split('.')[0]))
         vis.add_datasample(name='', image=mmcv.rgb2bgr(mmcv.imread(img_path)), data_sample=data_samples,
                            draw_pred=False, show=False,
-                           out_file='./{}/{}_还原_原图.jpg'.format(save_path,img_name.split('.')[0]))
+                           out_file='./{}/{}_还原_原图.jpg'.format(save_path, img_name.split('.')[0]))
 
 
 if __name__ == '__main__':
