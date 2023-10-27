@@ -28,11 +28,12 @@ trm_det_train_pipeline = [
     dict(type='RandomCrop', crop_size=(640, 640)),
     dict(type='YOLOXHSVRandomAug'),
     dict(type='RandomFlip', prob=1.0),
-    dict(type='Pad', size=(640, 640), pad_val=dict(img=(114, 114, 114))),
+    dict(type='Pad', size=(800, 800), pad_val=dict(img=(114, 114, 114))),
     dict(type='PackDetInputs',
          meta_keys=(
              'img_id', 'img_path', 'ori_shape', 'img_shape',
-             'scale_factor', 'flip', 'flip_direction', 'crop_index', 'scale_factor_list'
+             'scale_factor', 'flip', 'flip_direction', 'crop_index', 'scale_factor_list',
+             'pre_pad_size', 'pre_crop_size'
          )
          )
 ]
@@ -50,6 +51,7 @@ dino_train_pipeline = [
                     scales=[(480, 1333), (512, 1333), (544, 1333), (576, 1333),
                             (608, 1333), (640, 1333), (672, 1333), (704, 1333),
                             (736, 1333), (768, 1333), (800, 1333)],
+                    # scales=(480,1333),
                     keep_ratio=True)
             ],
             [
@@ -74,7 +76,8 @@ dino_train_pipeline = [
         ]),
     dict(type='PackDetInputs',
          meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
-                    'scale_factor', 'flip', 'flip_direction', 'crop_index', 'scale_factor_list', 'random_choice_idx'
+                    'scale_factor', 'flip', 'flip_direction', 'crop_index', 'scale_factor_list',
+                    'random_choice_idx', 'pre_pad_size', 'pre_crop_size'
                     )
          )
 ]
@@ -86,7 +89,8 @@ mask_rcnn_train_pipeline = [
     dict(type='RandomFlip', prob=1.0),
     dict(type='PackDetInputs',
          meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
-                    'scale_factor', 'flip', 'flip_direction', 'crop_index', 'scale_factor_list'
+                    'scale_factor', 'flip', 'flip_direction', 'crop_index', 'scale_factor_list',
+                    'pre_pad_size', 'pre_crop_size'
                     )
          )
 ]
@@ -164,7 +168,7 @@ def main():
         r'data\balloon\train\154446334_5d41cd1375_b.jpg',
         r'data\balloon\train\7488015492_0583857ca0_k.jpg',
     ]
-    transform_config = trm_det_train_pipeline
+    transform_config = mask_rcnn_train_pipeline
     data_infos = get_labels(img_paths)
     vis = DetLocalVisualizer()
     pipeline = build_data_preprocess(transform_config=transform_config)
@@ -198,7 +202,10 @@ def main():
 
         vis.add_datasample(name='', image=img, data_sample=data_samples, draw_pred=False, show=False,
                            out_file='./{}/{}_还原.jpg'.format(save_path, img_name.split('.')[0]))
-        vis.add_datasample(name='', image=mmcv.rgb2bgr(mmcv.imread(img_path)), data_sample=data_samples,
+
+        image = mmcv.rgb2bgr(mmcv.imread(img_path))
+        image = mmcv.imresize(image, size=(img.shape[1], img.shape[0]))
+        vis.add_datasample(name='', image=image, data_sample=data_samples,
                            draw_pred=False, show=False,
                            out_file='./{}/{}_还原_原图.jpg'.format(save_path, img_name.split('.')[0]))
 
