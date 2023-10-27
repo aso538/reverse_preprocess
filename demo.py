@@ -1,3 +1,5 @@
+import os
+
 import mmcv
 import json
 
@@ -162,13 +164,30 @@ def get_labels(img_path=None):
     return data_infos
 
 
+def readDir(dirPath):
+    if dirPath[-1] == '/':
+        print(u'文件夹路径末尾不能加/')
+        return
+    allFiles = []
+    if os.path.isdir(dirPath):
+        fileList = os.listdir(dirPath)
+        for f in fileList:
+            f = dirPath + '/' + f
+            if os.path.isdir(f):
+                subFiles = readDir(f)
+                allFiles = subFiles + allFiles  # 合并当前目录与子目录的所有文件路径
+            else:
+                if '.jpg' in f:
+                    allFiles.append(f)
+        return allFiles
+    else:
+        return 'Error,not a dir'
+
+
 def main():
     save_path = './out'
-    img_paths = [
-        r'data\balloon\train\154446334_5d41cd1375_b.jpg',
-        r'data\balloon\train\7488015492_0583857ca0_k.jpg',
-    ]
-    transform_config = mask_rcnn_train_pipeline
+    img_paths = readDir(r'data\balloon\train')
+    transform_config = trm_det_train_pipeline
     data_infos = get_labels(img_paths)
     vis = DetLocalVisualizer()
     pipeline = build_data_preprocess(transform_config=transform_config)
