@@ -1,3 +1,4 @@
+import copy
 import os
 
 import mmcv
@@ -8,20 +9,15 @@ from mmcv import Compose
 from mmdet.registry import TRANSFORMS
 from mmdet.utils import register_all_modules
 from mmdet.visualization.local_visualizer import DetLocalVisualizer
+import numpy as np
 
 from reverse import Reverse
 
 register_all_modules()
 
-trm_det_train_pipeline = [
+rtm_det_train_pipeline = [
     dict(backend_args=None, type='LoadImageFromFile'),
     dict(type='LoadAnnotations', with_bbox=True, with_mask=True),
-    # dict(
-    #     type='CachedMosaic',
-    #     img_scale=(640, 640),
-    #     pad_val=114.0,
-    #     max_cached_images=20,
-    #     random_pop=False),
     dict(
         type='RandomResize',
         scale=(1280, 1280),
@@ -53,7 +49,6 @@ dino_train_pipeline = [
                     scales=[(480, 1333), (512, 1333), (544, 1333), (576, 1333),
                             (608, 1333), (640, 1333), (672, 1333), (704, 1333),
                             (736, 1333), (768, 1333), (800, 1333)],
-                    # scales=(480,1333),
                     keep_ratio=True)
             ],
             [
@@ -91,8 +86,8 @@ mask_rcnn_train_pipeline = [
     dict(type='RandomFlip', prob=1.0),
     dict(type='PackDetInputs',
          meta_keys=('img_id', 'img_path', 'ori_shape', 'img_shape',
-                    'scale_factor', 'flip', 'flip_direction', 'crop_index', 'scale_factor_list',
-                    'pre_pad_size', 'pre_crop_size'
+                    'scale_factor', 'flip', 'flip_direction', 'crop_index',
+                    'scale_factor_list', 'pre_pad_size', 'pre_crop_size'
                     )
          )
 ]
@@ -186,44 +181,26 @@ def readDir(dirPath):
 
 def main():
     save_path = './out'
-    img_paths = readDir(r'data\balloon\train')
-    transform_config = trm_det_train_pipeline
+    img_paths = readDir(r'data/balloon/train')[0]
+    transform_config = rtm_det_train_pipeline
     data_infos = get_labels(img_paths)
     vis = DetLocalVisualizer()
     pipeline = build_data_preprocess(transform_config=transform_config)
     print(pipeline)
 
     for data_info in data_infos:
-        pre_result = pipeline(data_info)
+        pre_result, results = pipeline(data_info)
         data_samples = pre_result['data_samples']
-        reverse = Reverse(data_samples, transform_config)
-        print(data_samples)
+        reverse_results = copy.deepcopy(results)
+        reverse_results = pipeline(reverse_results, True)
 
-        bboxes = data_samples.gt_instances.bboxes.tensor.numpy()
-        data_samples.gt_instances.bboxes = bboxes
-        segs = data_samples.gt_instances.masks.masks
         img_path = data_info['img_path']
-        img_name = img_path.split('/')[-1]
-        # 683,1024-> 548 824 -> 548 640 -> 640 640
-        # ori_size-> resize -> crop -> pad
 
-        img = pre_result['inputs']
-        img = tensor2numpy(img)
-        img = mmcv.rgb2bgr(img)
-        vis.add_datasample(name='', image=img, data_sample=data_samples, draw_pred=False, show=False,
-                           out_file='./{}/{}_数据增强.jpg'.format(save_path, img_name.split('.')[0]))
-
-        bboxes, segs = reverse.reverse_preprocess(bboxes, segs)
-        data_samples.gt_instances.bboxes = bboxes
-        data_samples.gt_instances.masks.masks = segs
-
-        img = reverse.reverse_img(img)
-
-        vis.add_datasample(name='', image=img, data_sample=data_samples, draw_pred=False, show=False,
-                           out_file='./{}/{}_还原.jpg'.format(save_path, img_name.split('.')[0]))
+        data_samples.gt_instances.bboxes = np.array(reverse_results['gt_bboxes'].tensor)
+        data_samples.gt_instances.masks.masks = np.array(reverse_results['gt_masks'].masks)
 
         image = mmcv.rgb2bgr(mmcv.imread(img_path))
-        image = mmcv.imresize(image, size=(img.shape[1], img.shape[0]))
+        image = mmcv.imresize(image, size=(reverse_results['img_shape'][1], reverse_results['img_shape'][0]))
         vis.add_datasample(name='', image=image, data_sample=data_samples,
                            draw_pred=False, show=False,
                            out_file='./{}/{}_还原_原图.jpg'.format(save_path, img_name.split('.')[0]))
