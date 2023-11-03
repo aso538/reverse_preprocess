@@ -11,8 +11,6 @@ from mmdet.utils import register_all_modules
 from mmdet.visualization.local_visualizer import DetLocalVisualizer
 import numpy as np
 
-from reverse import Reverse
-
 register_all_modules()
 
 rtm_det_train_pipeline = [
@@ -30,8 +28,8 @@ rtm_det_train_pipeline = [
     dict(type='PackDetInputs',
          meta_keys=(
              'img_id', 'img_path', 'ori_shape', 'img_shape',
-             'scale_factor', 'flip', 'flip_direction', 'crop_index', 'scale_factor_list',
-             'pre_pad_size', 'pre_crop_size'
+             'scale_factor', 'flip', 'flip_direction',
+             'crop_index', 'scale_factor_list', 'pre_pad_size', 'pre_crop_size'
          )
          )
 ]
@@ -181,20 +179,30 @@ def readDir(dirPath):
 
 def main():
     save_path = './out'
-    img_paths = readDir(r'data/balloon/train')[0]
-    transform_config = rtm_det_train_pipeline
+    img_paths = readDir(r'data/balloon/train')
+    transform_config = mask_rcnn_train_pipeline
     data_infos = get_labels(img_paths)
     vis = DetLocalVisualizer()
     pipeline = build_data_preprocess(transform_config=transform_config)
-    print(pipeline)
+    # print(pipeline)
 
     for data_info in data_infos:
-        pre_result, results = pipeline(data_info)
-        data_samples = pre_result['data_samples']
-        reverse_results = copy.deepcopy(results)
-        reverse_results = pipeline(reverse_results, True)
-
         img_path = data_info['img_path']
+        img_name = img_path.split('/')[-1]
+        pre_result, results = pipeline(data_info)
+
+        data_samples = pre_result['data_samples']
+        img = pre_result['inputs']
+        img = tensor2numpy(img)
+        img = mmcv.rgb2bgr(img)
+
+        data_samples.gt_instances.bboxes = data_samples.gt_instances.bboxes.tensor.numpy()
+        vis.add_datasample(name='', image=img, data_sample=data_samples, draw_pred=False, show=False,
+                           out_file='./{}/{}_数据增强.jpg'.format(save_path, img_name.split('.')[0]))
+
+        reverse_results = copy.deepcopy(results)
+        reverse_results['mask_scale_factor_list'] = copy.deepcopy(reverse_results['scale_factor_list'])
+        reverse_results = pipeline(reverse_results, True)
 
         data_samples.gt_instances.bboxes = np.array(reverse_results['gt_bboxes'].tensor)
         data_samples.gt_instances.masks.masks = np.array(reverse_results['gt_masks'].masks)
