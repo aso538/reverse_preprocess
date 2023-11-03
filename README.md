@@ -105,6 +105,6 @@ mask_rcnn_train_pipeline = [
 ```
 模拟模型输出结果
 ![mask_result](resources/mask_result.png)
-s
+
 还原到原图上效果
 ![mask_reverse](resources/mask_reverse.png)
